@@ -1,0 +1,107 @@
+#include <TM1637Display.h>
+
+const uint8_t NUM_DIRS = 4;
+const char DIR_CHARS[NUM_DIRS] = {'N', 'S', 'E', 'W'};
+//                          R   Y   G
+const uint8_t PINS[NUM_DIRS][3] = {
+  {2, 3, 4},     // North
+  {5, 6, 7},     // South
+  {8, 9, 10},    // East
+  {11, 12, 13}   // West
+};
+
+const uint8_t CLK_PIN = A0;
+const uint8_t DIO_PINS[NUM_DIRS] = {A1, A2, A3, A4};
+
+TM1637Display displays[NUM_DIRS] = {
+  TM1637Display(CLK_PIN, DIO_PINS[0]),
+  TM1637Display(CLK_PIN, DIO_PINS[1]),
+  TM1637Display(CLK_PIN, DIO_PINS[2]),
+  TM1637Display(CLK_PIN, DIO_PINS[3])
+};
+
+const unsigned long FAILSAFE_MS = 10000;
+unsigned long lastMsg = 0;
+bool safeMode = false;
+String buf = "";
+
+void setDir(int d, bool r, bool y, bool g) {
+  digitalWrite(PINS[d][0], r);
+  digitalWrite(PINS[d][1], y);
+  digitalWrite(PINS[d][2], g);
+}
+
+void showDashes(int d) {
+  const uint8_t dashes[] = {0x40, 0x40, 0x40, 0x40};
+  displays[d].setSegments(dashes);
+}
+
+void allRed() {
+  for (int i = 0; i < NUM_DIRS; i++) {
+    setDir(i, true, false, false);
+    showDashes(i);
+  }
+}
+
+int dirIndex(char c) {
+  for (int i = 0; i < NUM_DIRS; i++) if (DIR_CHARS[i] == c) return i;
+  return -1;
+}
+
+void handleCommand(String cmd) {
+  cmd.trim();
+  if (cmd.length() == 0) return;
+  lastMsg = millis();
+
+  if (cmd == "X") { safeMode = true; return; }
+  safeMode = false;
+
+  if (cmd == "R") { allRed(); Serial.println("OK R"); return; }
+
+  if (cmd.length() >= 3 && cmd[1] == ',') {
+    int d = dirIndex(cmd[0]);
+    char s = cmd[2];
+    if (d < 0 || (s != 'G' && s != 'Y')) return;
+
+    int secs = -1;
+    if (cmd.length() > 4 && cmd[3] == ',') secs = cmd.substring(4).toInt();
+
+    allRed();
+    if (s == 'G') setDir(d, false, false, true);
+    else          setDir(d, false, true, false);
+
+    if (secs >= 0) displays[d].showNumberDec(secs, false);
+    else if (s == 'Y') displays[d].showNumberDec(0, false);
+
+    Serial.println("OK " + cmd);
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  for (int i = 0; i < NUM_DIRS; i++) {
+    for (int j = 0; j < 3; j++) pinMode(PINS[i][j], OUTPUT);
+    displays[i].setBrightness(7);
+  }
+  allRed();
+  lastMsg = millis();
+  Serial.println("READY");
+}
+
+void loop() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') { handleCommand(buf); buf = ""; }
+    else if (buf.length() < 16) buf += c;
+  }
+
+  if (!safeMode && millis() - lastMsg > FAILSAFE_MS) safeMode = true;
+
+  if (safeMode) {
+    bool on = (millis() / 500) % 2;
+    for (int i = 0; i < NUM_DIRS; i++) {
+      setDir(i, false, on, false);
+      displays[i].clear();
+    }
+  }
+}
