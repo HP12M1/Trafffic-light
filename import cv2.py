@@ -20,8 +20,8 @@ if not cap.isOpened():
     exit()
 
 # Set camera resolution
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1920)
 
 # 3. Vehicle classes in the YOLO COCO model
 # 2 = Car, 3 = Motorcycle, 5 = Bus, 7 = Truck
