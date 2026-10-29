@@ -1,0 +1,38 @@
+import time
+import serial
+from serial.tools import list_ports
+
+PORT = "COM4"   # change to your Uno's port
+
+print("Ports found:")
+for p in list_ports.comports():
+    print("  ", p.device, "-", p.description)
+
+ser = serial.Serial(PORT, 9600, timeout=0.5)
+time.sleep(2)  # the Uno resets when the port opens
+
+def send(cmd):
+    ser.write((cmd + "\n").encode())
+    print("sent:", cmd)
+    time.sleep(0.2)
+    while ser.in_waiting:
+        print("  arduino:", ser.readline().decode(errors="ignore").strip())
+
+# Did the Arduino say READY at startup?
+while ser.in_waiting:
+    print("arduino:", ser.readline().decode(errors="ignore").strip())
+
+try:
+    # North counts down 5..1 in green, then yellow
+    for d in "NSEW":
+        for s in range(5, 0, -1):
+            send(f"{d},G,{s}")
+            time.sleep(0.8)
+        send(f"{d},Y,0")
+        time.sleep(1.5)
+        send("R")
+        time.sleep(1)
+    print("Test finished.")
+finally:
+    ser.write(b"X\n")
+    ser.close()
