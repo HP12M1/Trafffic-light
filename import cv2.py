@@ -31,8 +31,8 @@ VEHICLE_CLASSES = [2, 3, 5, 7]
 
 #Arduino Definitions Port and send commands
 
-ARDUINO_PORT = "COM4"      # your Uno's port
-USE_ARDUINO = False         # set False to test without the Arduino
+ARDUINO_PORT = "COM3"      # your Uno's port
+USE_ARDUINO = True         # set False to test without the Arduino
 
 arduino = None
 if USE_ARDUINO:
