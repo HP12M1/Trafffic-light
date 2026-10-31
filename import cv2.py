@@ -1,4 +1,6 @@
 import cv2
+import serial
+import math
 import time
 from ultralytics import YOLO
 
@@ -11,6 +13,25 @@ from ultralytics import YOLO
 # 1. Load YOLO model
 print("Loading vehicle detection model...")
 model = YOLO("yolov8n.pt")
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # use your USB camera index
+
+for _ in range(10):
+    cap.read()
+
+while True:
+    ret, frame = cap.read()      # frame is created here
+    if not ret:
+        continue
+
+    results = model(frame, verbose=False)[0]   # only use frame below this line
+    annotated = results.plot()
+    cv2.imshow("Traffic", annotated)
+
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
 
 # 2. Open USB camera
 cap = cv2.VideoCapture(0)
@@ -25,14 +46,39 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 # 3. Vehicle classes in the YOLO COCO model
 # 2 = Car, 3 = Motorcycle, 5 = Bus, 7 = Truck
-VEHICLE_CLASSES = [2, 3, 5, 7]
+VEHICLE_CLASSES = [2, 3, 5, 7, 67]  # car, motorcycle, bus, truck, cell phone
+
+results = model(frame, classes=VEHICLE_CLASSES, conf=0.25, verbose=False)[0]
+
+#Arduino Definitions Port and send commands
+
+ARDUINO_PORT = "COM3"      # your Uno's port
+USE_ARDUINO = False         # set False to test without the Arduino
+
+arduino = None
+if USE_ARDUINO:
+    arduino = serial.Serial(ARDUINO_PORT, 9600, timeout=0.1)
+    time.sleep(2)          # the Uno resets when the port opens
+    print("Arduino connected on", ARDUINO_PORT)
+
+last_cmd = ""
+last_cmd_time = 0.0
+
+def send_to_arduino(cmd):
+    """Send on change, and re-send every second so the failsafe stays off."""
+    global last_cmd, last_cmd_time
+    now = time.time()
+    if arduino and (cmd != last_cmd or now - last_cmd_time > 1.0):
+        arduino.write((cmd + "\n").encode())
+        last_cmd = cmd
+        last_cmd_time = now
 
 # 4. Define the four traffic regions (x1, y1, x2, y2)
 REGIONS = {
-    "North": (180, 0, 460, 160),
-    "South": (180, 320, 460, 480),
-    "East":  (420, 130, 640, 350),
-    "West":  (0, 130, 220, 350)
+    "North": (400, 0, 880, 220),
+    "South": (400, 500, 880, 720),
+    "East":  (880, 220, 1280, 500),
+    "West":  (0, 220, 400, 500)
 }
 
 # 5. Traffic timing settings
@@ -171,6 +217,18 @@ try:
             if elapsed >= YELLOW_TIME:
                 signal_state = "ALL_RED"
                 state_start_time = now
+
+            #------------------------------
+        # SEND SIGNAL TO ARDUINO
+            #------------------------------
+            
+        if signal_state == "GREEN" and current_direction:
+            remaining = max(0.0, green_duration - elapsed)
+            send_to_arduino(f"{current_direction[0]},G,{math.ceil(remaining)}")
+        elif signal_state == "YELLOW" and current_direction:
+            send_to_arduino(f"{current_direction[0]},Y,0")
+        else:
+            send_to_arduino("R")
 
         # ------------------------------
         # HUD / DISPLAY RENDER
